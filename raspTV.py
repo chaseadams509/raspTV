@@ -25,9 +25,16 @@ p_under = 0.09
 p_over  = 0.01
 rasp_volume = 30
 
+init_state = 1
+init_increase = 1
+init_decrease = 1
+init_hdmi = 1
+
+
 def hdmi_sense(Z, p):
 	global rasp_hdmi_world
 	global p_announce
+	print "Trying to sense HDMI"
 	q = []
 	for i in range(len(p)):
 		hit = Z in rasp_hdmi_world[i]
@@ -56,7 +63,6 @@ def func_status():
 	print "Changing TV to ", rasp_state
 	call(["irsend", "SEND_ONCE", "sanyo-tv01", 
 		"KEY_POWER"])
-	sleep(1)
 	return
 
 def func_volume(state, decrease):
@@ -73,7 +79,6 @@ def func_volume(state, decrease):
 		state -= 1
 		sleep(0.01)
 	print "Rasp_volume is now", rasp_volume
-	sleep(1)
 	return
 
 def func_hdmi(state):
@@ -89,7 +94,8 @@ def func_hdmi(state):
 			call(["irsend", "SEND_ONCE", "sanyo-tv01", 
 				"KEY_VIDEO"])
 			state_adjusted -= 1
-		rasp_hdmi_probs = hdmi_sense('HDMI', rasp_hdmi_probs)
+			sleep(0.5)
+		#rasp_hdmi_probs = hdmi_sense('HDMI', rasp_hdmi_probs)
 	elif state < 50:
 		state_adjusted = state - 10
 		print "Setting hdmi to", state_adjusted
@@ -101,6 +107,7 @@ def func_hdmi(state):
 			call(["irsend", "SEND_ONCE", "sanyo-tv01", 
 				"KEY_VIDEO"])
 			movement -= 1
+			sleep(0.5)
 	else:
 		state_adjusted = state - 50
 		print "Announcing hdmi as", state_adjusted
@@ -109,12 +116,16 @@ def func_hdmi(state):
 	rasp_hdmi = rasp_hdmi_probs.index(m_prob)
 	print "rasp_hdmi is now", rasp_hdmi
 	print "hdmi probabilities are:", rasp_hdmi_probs
-	sleep(0.5)
 	return
 
 def callback_status(payload):
+	global init_state
 	msg = str(payload)
 	status_state = Act_Status.state
+	if init_state:
+		init_state = 0
+		return
+	print "Status state is", status_state 
 	if status_state == 0:
 		return
 	func_status()
@@ -122,8 +133,13 @@ def callback_status(payload):
 	return
 
 def callback_increase(payload):
+	global init_increase
 	msg = str(payload)
 	increase_state = int(Act_Increase.state)
+	if init_increase:
+		init_increase = 0
+		return
+	print "Increase state is", increase_state
 	if increase_state == 0:
 		return
 	func_volume(increase_state, False)
@@ -131,8 +147,13 @@ def callback_increase(payload):
 	return
 
 def callback_decrease(payload):
+	global init_decrease
 	msg = str(payload)
 	decrease_state = int(Act_Decrease.state)
+	if init_decrease:
+		init_decrease = 0
+		return
+	print "Decrease state is", decrease_state
 	if decrease_state == 0:
 		return
 	func_volume(decrease_state, True)
@@ -140,8 +161,13 @@ def callback_decrease(payload):
 	return
 
 def callback_hdmi(payload):
+	global init_hdmi
 	msg = str(payload)
 	hdmi_state = int(Act_HDMI.state)
+	if init_hdmi:
+		init_hdmi = 0
+		return
+	print "HDMI state is", hdmi_state
 	if hdmi_state == 0:
 		return
 	func_hdmi(hdmi_state)
@@ -149,30 +175,34 @@ def callback_hdmi(payload):
 	return
 
 if __name__ == "__main__":
-	project = Project(PROJECT_ID)
-	device = Device(project, DEVICE_UUID, API_KEY)
-	Act_Status = Actuator(Actuator.DIGITAL, ACTUATOR_STATE)
-	Act_Increase = Actuator(Actuator.ANALOG, ACTUATOR_VOLUP)
-	Act_Decrease = Actuator(Actuator.ANALOG, ACTUATOR_VOLDOWN)
-	Act_HDMI = Actuator(Actuator.ANALOG, ACTUATOR_HDMI)
-	device.addActuator(Act_Status, callback_status)
-	device.addActuator(Act_Increase, callback_increase)
-	device.addActuator(Act_Decrease, callback_decrease)
-	device.addActuator(Act_HDMI, callback_hdmi)
 	failed_start = (call(["sudo", "/etc/init.d/lirc", "stop"]) or
 			call(["sudo", "/etc/init.d/lirc", "start"]) or
 			call(["sudo", "lircd", "-d", "/dev/lirc0"]) or
 			call(["irsend", "LIST", "sanyo-tv01", ""]))
+	sleep(5)
 	if failed_start:
 		print "Could not initialize"
 
 	
 	keep_going = True
-	while keep_going:
+	#while keep_going:
+	if True:
+		project = Project(PROJECT_ID)
+		device = Device(project, DEVICE_UUID, API_KEY)
+		Act_Status = Actuator(Actuator.DIGITAL, ACTUATOR_STATE)
+		Act_Increase = Actuator(Actuator.ANALOG, ACTUATOR_VOLUP)
+		Act_Decrease = Actuator(Actuator.ANALOG, ACTUATOR_VOLDOWN)
+		Act_HDMI = Actuator(Actuator.ANALOG, ACTUATOR_HDMI)
+		device.addActuator(Act_Status, callback_status)
+		device.addActuator(Act_Increase, callback_increase)
+		device.addActuator(Act_Decrease, callback_decrease)
+		device.addActuator(Act_HDMI, callback_hdmi)
 		try:
 			while True:
-				pass
+				sleep(0.01)
 		except KeyboardInterrupt:
 			print "Ending raspTV"
 			keep_going = False
+		except:
+			print "Re-trying"
 
